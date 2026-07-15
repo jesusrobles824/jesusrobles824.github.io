@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registro ADR · Cotizaciones argentinas en Wall Street</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/3.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+<style>
+  /* ============ TOKENS ============ */
+  :root{
+    --ink:      #0F201F;   /* fondo, tinta de plancha grabada */
+    --panel:    #16302D;   /* paneles elevados */
+    --panel-2:  #1C3835;   /* paneles sobre paneles */
+    --paper:    #EFE7D2;   /* papel envejecido / texto principal */
+    --paper-dim:#B9AF97;   /* texto secundario sobre tinta */
+    --gold:     #C79A3D;   /* filete grabado, acento */
+    --gold-dim: #8C712C;
+    --up:       #7FA97F;   /* verde salvia apagado */
+    --down:     #C06A4F;   /* óxido apagado */
+    --line:     rgba(239,231,210,.14);
+    --line-soft:rgba(239,231,210,.07);
+
+    --serif: 'Fraunces', Georgia, serif;
+    --mono:  'IBM Plex Mono', ui-monospace, monospace;
+    --sans:  'Inter', system-ui, sans-serif;
+
+    --radius: 3px;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(199,154,61,.07), transparent 60%),
+      var(--ink);
+    color:var(--paper);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  a{color:var(--gold);}
+
+  :focus-visible{
+    outline:2px solid var(--gold);
+    outline-offset:2px;
+  }
+
+  ::selection{ background:var(--gold); color:var(--ink); }
+
+  /* ============ MASTHEAD ============ */
+  .masthead{
+    position:relative;
+    padding:56px 24px 32px;
+    text-align:center;
+    overflow:hidden;
+    border-bottom:1px solid var(--line);
+  }
+
+  /* guilloché-style engraved texture, subtle */
+  .masthead::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image: repeating-linear-gradient(
+        115deg,
+        rgba(239,231,210,.035) 0px,
+        rgba(239,231,210,.035) 1px,
+        transparent 1px,
+        transparent 7px
+      );
+    mask-image: radial-gradient(ellipse 70% 100% at 50% 0%, black 30%, transparent 75%);
+    pointer-events:none;
+  }
+
+  .eyebrow{
+    position:relative;
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    color:var(--gold);
+    margin:0 0 18px;
+  }
+  .eyebrow::before,.eyebrow::after{
+    content:"◆";
+    color:var(--gold-dim);
+    margin:0 12px;
+    font-size:8px;
+    vertical-align:middle;
+  }
+
+  h1{
+    position:relative;
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:clamp(2.4rem, 6vw, 4.4rem);
+    letter-spacing:-.01em;
+    margin:0 0 14px;
+    line-height:1.02;
+  }
+  h1 em{
+    font-style:italic;
+    font-weight:500;
+    color:var(--gold);
+  }
+
+  .subtitle{
+    position:relative;
+    max-width:560px;
+    margin:0 auto;
+    color:var(--paper-dim);
+    font-size:15px;
+    line-height:1.6;
+  }
+
+  .asof{
+    position:relative;
+    margin-top:22px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--paper-dim);
+    letter-spacing:.04em;
+  }
+  .asof b{ color:var(--paper); font-weight:500; }
+
+  /* ============ TICKER TAPE (signature element) ============ */
+  .tape-wrap{
+    border-bottom:1px solid var(--line);
+    background:var(--panel);
+    overflow:hidden;
+    position:relative;
+  }
+  .tape-wrap::after{
+    content:"";
+    position:absolute; inset:0;
+    box-shadow: inset 40px 0 24px -24px var(--panel), inset -40px 0 24px -24px var(--panel);
+    pointer-events:none;
+  }
+  .tape{
+    display:flex;
+    width:max-content;
+    animation: scroll-tape 46s linear infinite;
+    font-family:var(--mono);
+    font-size:13px;
+    white-space:nowrap;
+  }
+  .tape-wrap:hover .tape{ animation-play-state:paused; }
+  @keyframes scroll-tape{
+    from{ transform:translateX(0); }
+    to{ transform:translateX(-50%); }
+  }
+  .tape-item{
+    padding:12px 22px;
+    border-right:1px solid var(--line-soft);
+    letter-spacing:.02em;
+  }
+  .tape-item .sym{ color:var(--paper); font-weight:500; margin-right:8px; }
+  .tape-item .up{ color:var(--up); }
+  .tape-item .down{ color:var(--down); }
+
+  @media (prefers-reduced-motion: reduce){
+    .tape{ animation:none; overflow-x:auto; }
+  }
+
+  /* ============ LAYOUT ============ */
+  main{
+    max-width:1180px;
+    margin:0 auto;
+    padding:40px 24px 80px;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns: 280px 1fr;
+    gap:28px;
+    align-items:start;
+  }
+  @media (max-width:860px){
+    .grid{ grid-template-columns:1fr; }
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:22px;
+  }
+
+  .panel h2{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--gold);
+    margin:0 0 16px;
+    padding-bottom:12px;
+    border-bottom:1px solid var(--line);
+  }
+
+  .field-label{
+    display:block;
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--paper-dim);
+    margin:20px 0 8px;
+  }
+  .field-label:first-of-type{ margin-top:0; }
+
+  .presets{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+  }
+  .chip{
+    font-family:var(--mono);
+    font-size:11.5px;
+    background:transparent;
+    color:var(--paper-dim);
+    border:1px solid var(--line);
+    border-radius:2px;
+    padding:6px 10px;
+    cursor:pointer;
+    transition:border-color .15s, color .15s, background .15s;
+  }
+  .chip:hover{ border-color:var(--gold-dim); color:var(--paper); }
+  .chip.active{ background:var(--gold); border-color:var(--gold); color:var(--ink); font-weight:600; }
+
+  .date-row{
+    display:flex;
+    gap:8px;
+  }
+  input[type="date"]{
+    flex:1;
+    min-width:0;
+    background:var(--ink);
+    border:1px solid var(--line);
+    color:var(--paper);
+    font-family:var(--mono);
+    font-size:12px;
+    padding:8px;
+    border-radius:2px;
+    color-scheme:dark;
+  }
+
+  .view-toggle{
+    display:flex;
+    border:1px solid var(--line);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  .view-toggle button{
+    flex:1;
+    background:transparent;
+    border:none;
+    color:var(--paper-dim);
+    font-family:var(--mono);
+    font-size:11.5px;
+    letter-spacing:.05em;
+    padding:9px 6px;
+    cursor:pointer;
+    border-right:1px solid var(--line);
+  }
+  .view-toggle button:last-child{ border-right:none; }
+  .view-toggle button.active{ background:var(--gold); color:var(--ink); font-weight:600; }
+
+  .ticker-list{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    max-height:340px;
+    overflow-y:auto;
+    padding-right:4px;
+  }
+  .ticker-list::-webkit-scrollbar{ width:6px; }
+  .ticker-list::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+
+  .ticker-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:7px 6px;
+    border-radius:2px;
+    cursor:pointer;
+    font-family:var(--mono);
+    font-size:12.5px;
+  }
+  .ticker-row:hover{ background:var(--panel-2); }
+  .ticker-row input{ accent-color:var(--gold); }
+  .ticker-row .swatch{
+    width:9px; height:9px; border-radius:50%;
+    flex-shrink:0;
+  }
+  .ticker-row .name{ color:var(--paper); }
+  .ticker-row .last{ margin-left:auto; color:var(--paper-dim); font-size:11px; }
+
+  .panel-actions{
+    display:flex;
+    gap:8px;
+    margin-top:14px;
+  }
+  .link-btn{
+    background:none;
+    border:none;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--gold);
+    text-decoration:underline;
+    text-underline-offset:2px;
+    cursor:pointer;
+    padding:0;
+  }
+
+  /* ============ CHART CARD ============ */
+  .chart-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:22px;
+    min-height:460px;
+    display:flex;
+    flex-direction:column;
+  }
+  .chart-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .chart-head h3{
+    font-family:var(--serif);
+    font-weight:600;
+    font-size:1.3rem;
+    margin:0;
+  }
+  .chart-head span{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--paper-dim);
+    letter-spacing:.05em;
+  }
+  .chart-body{
+    position:relative;
+    flex:1;
+    min-height:340px;
+  }
+
+  .status-msg{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    height:100%;
+    min-height:300px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--paper-dim);
+    text-align:center;
+    padding:20px;
+    line-height:1.7;
+  }
+  .status-msg.error{ color:var(--down); }
+
+  /* ============ TABLE ============ */
+  .table-section{ margin-top:28px; }
+  .table-section h2{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--gold);
+    margin:0 0 14px;
+  }
+  .table-scroll{
+    overflow-x:auto;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-family:var(--mono);
+    font-size:12.5px;
+    min-width:520px;
+  }
+  thead th{
+    text-align:left;
+    padding:12px 16px;
+    background:var(--panel-2);
+    color:var(--paper-dim);
+    font-weight:500;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    font-size:10.5px;
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0;
+  }
+  thead th.num, td.num{ text-align:right; }
+  tbody td{
+    padding:11px 16px;
+    border-bottom:1px solid var(--line-soft);
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:var(--panel-2); }
+  td.up{ color:var(--up); }
+  td.down{ color:var(--down); }
+  td.sym{ color:var(--paper); font-weight:500; letter-spacing:.03em; }
+
+  footer{
+    text-align:center;
+    padding:36px 24px 48px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--paper-dim);
+    letter-spacing:.03em;
+    border-top:1px solid var(--line);
+  }
+  footer a{ color:var(--paper-dim); text-decoration:underline; text-underline-offset:2px; }
+</style>
+</head>
+<body>
+
+  <header class="masthead">
+    <p class="eyebrow">Bolsa · Wall Street · Actualización diaria</p>
+    <h1>Registro <em>ADR</em></h1>
+    <p class="subtitle">Cotizaciones de cierre de las acciones argentinas que cotizan como ADR en Estados Unidos, con su variación porcentual diaria.</p>
+    <p class="asof">Última jornada cargada: <b id="asof-date">—</b></p>
+  </header>
+
+  <div class="tape-wrap">
+    <div class="tape" id="tape"></div>
+  </div>
+
+  <main>
+    <div class="grid">
+
+      <!-- ===== FILTER PANEL ===== -->
+      <aside class="panel">
+        <h2>Filtros</h2>
+
+        <span class="field-label">Rango de fechas</span>
+        <div class="presets" id="presets">
+          <button class="chip" data-range="1M">1M</button>
+          <button class="chip" data-range="3M">3M</button>
+          <button class="chip" data-range="6M">6M</button>
+          <button class="chip" data-range="YTD">YTD</button>
+          <button class="chip" data-range="1A">1A</button>
+          <button class="chip active" data-range="ALL">Todo</button>
+        </div>
+
+        <span class="field-label">Rango personalizado</span>
+        <div class="date-row">
+          <input type="date" id="date-start" aria-label="Fecha desde">
+          <input type="date" id="date-end" aria-label="Fecha hasta">
+        </div>
+
+        <span class="field-label">Vista</span>
+        <div class="view-toggle">
+          <button class="active" data-view="precio">Precio (USD)</button>
+          <button data-view="variacion">Variación %</button>
+        </div>
+
+        <span class="field-label">ADRs (<span id="ticker-count">0</span> de <span id="ticker-total">0</span>)</span>
+        <div class="ticker-list" id="ticker-list"></div>
+
+        <div class="panel-actions">
+          <button class="link-btn" id="select-all">Seleccionar todos</button>
+          <button class="link-btn" id="select-none">Limpiar</button>
+        </div>
+      </aside>
+
+      <!-- ===== CHART ===== -->
+      <section class="chart-card">
+        <div class="chart-head">
+          <h3 id="chart-title">Precio de cierre</h3>
+          <span id="chart-range-label"></span>
+        </div>
+        <div class="chart-body">
+          <canvas id="chart" style="display:none;"></canvas>
+          <div class="status-msg" id="status">Cargando datos del repositorio…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== TABLE ===== -->
+    <section class="table-section">
+      <h2>Última jornada</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>ADR</th>
+              <th class="num">Cierre (USD)</th>
+              <th class="num">Var. diaria %</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr><td colspan="3" style="text-align:center; color:var(--paper-dim); padding:24px;">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Fuente: Yahoo Finance vía script automatizado &middot;
+    Los datos se actualizan una vez por día mediante un workflow programado.
+  </footer>
+
+<script>
+/* ============================================================
+   CONFIGURACIÓN
+   Ajustá estas dos rutas si movés los CSV de carpeta.
+   Al usar GitHub Pages con rutas relativas, este archivo debe
+   estar en la raíz del repo (o ajustar la ruta relativa acorde).
+   ============================================================ */
+const CONFIG = {
+  csvPrecios:   'ADRs_Precios.csv',
+  csvVariacion: 'ADRs_variacion_porcentual_diaria.csv',
+};
+
+const PALETTE = ['#C79A3D','#7FA97F','#C06A4F','#8FA7B3','#B98FC0','#D9C36A',
+                 '#7FB3A9','#C08F6A','#9FA97F','#A97F9E','#7F93A9','#C0A47F',
+                 '#7FA9A0','#A97F7F','#A0A97F'];
+
+let state = {
+  view: 'precio',        // 'precio' | 'variacion'
+  range: 'ALL',
+  customStart: null,
+  customEnd: null,
+  selected: new Set(),
+  tickers: [],
+  seriesPrecio: {},       // ticker -> [{x:Date, y:num}, ...] asc
+  seriesVariacion: {},
+  dates: [],              // sorted asc, Date objects
+};
+
+let chart = null;
+
+async function loadCSV(path){
+  const res = await fetch(encodeURI(path));
+  if(!res.ok) throw new Error('No se pudo leer "' + path + '" (HTTP ' + res.status + ')');
+  const text = await res.text();
+  const parsed = Papa.parse(text, { header:true, dynamicTyping:true, skipEmptyLines:true });
+  if(parsed.errors && parsed.errors.length){
+    console.warn('Avisos al parsear', path, parsed.errors);
+  }
+  return parsed.data;
+}
+
+function rowsToSeries(rows){
+  // rows: [{fecha: '2026-07-10', BBAR: 12.3, BMA: 45.1, ...}, ...] (orden desc en el CSV)
+  const tickers = Object.keys(rows[0] || {}).filter(k => k !== 'fecha');
+  const series = {};
+  tickers.forEach(t => series[t] = []);
+  const dateSet = new Set();
+
+  rows.forEach(r => {
+    if(!r.fecha) return;
+    const d = new Date(r.fecha);
+    if(isNaN(d)) return;
+    dateSet.add(d.getTime());
+    tickers.forEach(t => {
+      const v = r[t];
+      if(v !== null && v !== undefined && v !== '' && !isNaN(v)){
+        series[t].push({ x:d, y:Number(v) });
+      }
+    });
+  });
+
+  tickers.forEach(t => series[t].sort((a,b)=>a.x-b.x));
+  const dates = Array.from(dateSet).map(t=>new Date(t)).sort((a,b)=>a-b);
+  return { tickers, series, dates };
+}
+
+function fmtDate(d){
+  return d.toLocaleDateString('es-AR', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+function colorFor(ticker){
+  const idx = state.tickers.indexOf(ticker);
+  return PALETTE[idx % PALETTE.length];
+}
+
+/* ---------- UI: lista de tickers ---------- */
+function buildTickerList(){
+  const list = document.getElementById('ticker-list');
+  list.innerHTML = '';
+  state.tickers.forEach(t => {
+    const row = document.createElement('label');
+    row.className = 'ticker-row';
+    const lastPoint = state.seriesPrecio[t] && state.seriesPrecio[t][state.seriesPrecio[t].length-1];
+    row.innerHTML = `
+      <input type="checkbox" data-ticker="${t}" ${state.selected.has(t) ? 'checked' : ''}>
+      <span class="swatch" style="background:${colorFor(t)}"></span>
+      <span class="name">${t}</span>
+      <span class="last">${lastPoint ? lastPoint.y.toFixed(2) : '—'}</span>
+    `;
+    row.querySelector('input').addEventListener('change', (e) => {
+      if(e.target.checked) state.selected.add(t); else state.selected.delete(t);
+      updateCounts();
+      renderChart();
+      renderTable();
+    });
+    list.appendChild(row);
+  });
+  updateCounts();
+}
+
+function updateCounts(){
+  document.getElementById('ticker-count').textContent = state.selected.size;
+  document.getElementById('ticker-total').textContent = state.tickers.length;
+}
+
+/* ---------- Rango de fechas ---------- */
+function computeRangeBounds(){
+  const all = state.dates;
+  if(!all.length) return [null, null];
+  const last = all[all.length-1];
+  let start;
+
+  if(state.customStart || state.customEnd){
+    start = state.customStart ? new Date(state.customStart) : all[0];
+    const end = state.customEnd ? new Date(state.customEnd) : last;
+    return [start, end];
+  }
+
+  switch(state.range){
+    case '1M': start = new Date(last); start.setMonth(start.getMonth()-1); break;
+    case '3M': start = new Date(last); start.setMonth(start.getMonth()-3); break;
+    case '6M': start = new Date(last); start.setMonth(start.getMonth()-6); break;
+    case '1A': start = new Date(last); start.setFullYear(start.getFullYear()-1); break;
+    case 'YTD': start = new Date(last.getFullYear(), 0, 1); break;
+    default: start = all[0];
+  }
+  return [start, last];
+}
+
+/* ---------- Gráfico ---------- */
+function renderChart(){
+  const statusEl = document.getElementById('status');
+  const canvas = document.getElementById('chart');
+
+  if(state.selected.size === 0){
+    canvas.style.display = 'none';
+    statusEl.style.display = 'flex';
+    statusEl.className = 'status-msg';
+    statusEl.textContent = 'Elegí al menos un ADR en el panel de filtros para ver el gráfico.';
+    return;
+  }
+  statusEl.style.display = 'none';
+  canvas.style.display = 'block';
+
+  const [start, end] = computeRangeBounds();
+  const seriesSrc = state.view === 'precio' ? state.seriesPrecio : state.seriesVariacion;
+
+  const datasets = Array.from(state.selected).map(t => {
+    const pts = (seriesSrc[t] || []).filter(p => p.x >= start && p.x <= end);
+    return {
+      label: t,
+      data: pts,
+      borderColor: colorFor(t),
+      backgroundColor: colorFor(t),
+      borderWidth: 1.75,
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      tension: 0.15,
+      spanGaps: true,
+    };
+  });
+
+  document.getElementById('chart-title').textContent =
+    state.view === 'precio' ? 'Precio de cierre (USD)' : 'Variación porcentual diaria';
+  document.getElementById('chart-range-label').textContent =
+    start && end ? `${fmtDate(start)} — ${fmtDate(end)}` : '';
+
+  if(chart) chart.destroy();
+  const ctx = canvas.getContext('2d');
+  chart = new Chart(ctx, {
+    type:'line',
+    data:{ datasets },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      animation:{ duration:400 },
+      interaction:{ mode:'nearest', axis:'x', intersect:false },
+      scales:{
+        x:{
+          type:'time',
+          time:{ unit: rangeUnit(start,end) },
+          grid:{ color:'rgba(239,231,210,.06)' },
+          ticks:{ color:'#B9AF97', font:{ family:'IBM Plex Mono', size:10 } },
+        },
+        y:{
+          grid:{ color:'rgba(239,231,210,.06)' },
+          ticks:{
+            color:'#B9AF97',
+            font:{ family:'IBM Plex Mono', size:10 },
+            callback: v => state.view === 'variacion' ? v + '%' : v,
+          },
+        }
+      },
+      plugins:{
+        legend:{
+          position:'bottom',
+          labels:{ color:'#EFE7D2', font:{ family:'IBM Plex Mono', size:11 }, boxWidth:10, boxHeight:10 }
+        },
+        tooltip:{
+          backgroundColor:'#1C3835',
+          titleColor:'#C79A3D',
+          bodyColor:'#EFE7D2',
+          titleFont:{ family:'IBM Plex Mono', size:11 },
+          bodyFont:{ family:'IBM Plex Mono', size:11 },
+          borderColor:'rgba(239,231,210,.14)',
+          borderWidth:1,
+          callbacks:{
+            label: (item) => {
+              const suffix = state.view === 'variacion' ? '%' : ' USD';
+              return ` ${item.dataset.label}: ${item.parsed.y.toFixed(2)}${suffix}`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function rangeUnit(start,end){
+  if(!start || !end) return 'month';
+  const days = (end-start)/86400000;
+  if(days <= 45) return 'day';
+  if(days <= 400) return 'month';
+  return 'quarter';
+}
+
+/* ---------- Tabla ---------- */
+function renderTable(){
+  const body = document.getElementById('table-body');
+  if(state.selected.size === 0){
+    body.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--paper-dim); padding:24px;">No hay ADRs seleccionados.</td></tr>';
+    return;
+  }
+  const rows = Array.from(state.selected).sort().map(t => {
+    const p = state.seriesPrecio[t];
+    const v = state.seriesVariacion[t];
+    const lastP = p && p.length ? p[p.length-1].y : null;
+    const lastV = v && v.length ? v[v.length-1].y : null;
+    const cls = lastV == null ? '' : (lastV >= 0 ? 'up' : 'down');
+    const sign = lastV == null ? '' : (lastV >= 0 ? '+' : '');
+    return `<tr>
+      <td class="sym">${t}</td>
+      <td class="num">${lastP != null ? lastP.toFixed(2) : '—'}</td>
+      <td class="num ${cls}">${lastV != null ? sign + lastV.toFixed(2) + '%' : '—'}</td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = rows;
+}
+
+/* ---------- Ticker tape ---------- */
+function buildTape(){
+  const tape = document.getElementById('tape');
+  const items = state.tickers.map(t => {
+    const v = state.seriesVariacion[t];
+    const last = v && v.length ? v[v.length-1].y : null;
+    const cls = last == null ? '' : (last >= 0 ? 'up' : 'down');
+    const arrow = last == null ? '' : (last >= 0 ? '▲' : '▼');
+    const val = last != null ? `${arrow} ${Math.abs(last).toFixed(2)}%` : 's/d';
+    return `<span class="tape-item"><span class="sym">${t}</span><span class="${cls}">${val}</span></span>`;
+  }).join('');
+  // duplicado para el loop continuo
+  tape.innerHTML = items + items;
+}
+
+/* ---------- Eventos de filtros ---------- */
+function wireEvents(){
+  document.querySelectorAll('#presets .chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#presets .chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.range = btn.dataset.range;
+      state.customStart = null;
+      state.customEnd = null;
+      document.getElementById('date-start').value = '';
+      document.getElementById('date-end').value = '';
+      renderChart();
+    });
+  });
+
+  document.getElementById('date-start').addEventListener('change', (e) => {
+    state.customStart = e.target.value || null;
+    document.querySelectorAll('#presets .chip').forEach(b => b.classList.remove('active'));
+    renderChart();
+  });
+  document.getElementById('date-end').addEventListener('change', (e) => {
+    state.customEnd = e.target.value || null;
+    document.querySelectorAll('#presets .chip').forEach(b => b.classList.remove('active'));
+    renderChart();
+  });
+
+  document.querySelectorAll('.view-toggle button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.view = btn.dataset.view;
+      renderChart();
+    });
+  });
+
+  document.getElementById('select-all').addEventListener('click', () => {
+    state.tickers.forEach(t => state.selected.add(t));
+    buildTickerList(); renderChart(); renderTable();
+  });
+  document.getElementById('select-none').addEventListener('click', () => {
+    state.selected.clear();
+    buildTickerList(); renderChart(); renderTable();
+  });
+}
+
+/* ---------- Carga inicial ---------- */
+async function init(){
+  wireEvents();
+  const statusEl = document.getElementById('status');
+  try{
+    const [preciosRows, variacionRows] = await Promise.all([
+      loadCSV(CONFIG.csvPrecios),
+      loadCSV(CONFIG.csvVariacion),
+    ]);
+
+    const precios = rowsToSeries(preciosRows);
+    const variacion = rowsToSeries(variacionRows);
+
+    state.tickers = precios.tickers;
+    state.seriesPrecio = precios.series;
+    state.seriesVariacion = variacion.series;
+    state.dates = precios.dates;
+    state.selected = new Set(state.tickers.slice(0, 6)); // primeros 6 preseleccionados
+
+    if(state.dates.length){
+      document.getElementById('asof-date').textContent = fmtDate(state.dates[state.dates.length-1]);
+    }
+
+    buildTickerList();
+    buildTape();
+    renderChart();
+    renderTable();
+
+  }catch(err){
+    console.error(err);
+    statusEl.className = 'status-msg error';
+    statusEl.textContent = 'No se pudieron cargar los datos: ' + err.message +
+      '. Verificá que las rutas en CONFIG coincidan con la ubicación real de los CSV en el repositorio.';
+    document.getElementById('table-body').innerHTML =
+      '<tr><td colspan="3" style="text-align:center; color:var(--down); padding:24px;">Error al cargar los datos.</td></tr>';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
